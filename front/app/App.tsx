@@ -15,9 +15,16 @@ import { ImageHandlingArea } from "@/components/ImageHandlingArea";
 import { ImageQueue } from "@/components/ImageQueue";
 import { ResultGallery } from "@/components/ResultGallery";
 import { Header } from "@/components/Header";
-import { loadSettings, saveSettings, loadFinishedImages, addFinishedImage } from "@/utils/localStorage";
+import {
+  loadSettings,
+  saveSettings,
+  loadFinishedImages,
+  addFinishedImage,
+} from "@/utils/localStorage";
+import { useI18n } from "@/i18n";
 
 export const App: React.FC = () => {
+  const { t } = useI18n();
   // State Hooks
   const [fileStatuses, setFileStatuses] = useState<Map<string, FileStatus>>(
     new Map()
@@ -242,7 +249,7 @@ export const App: React.FC = () => {
     });
 
     if (response.status !== 200) {
-      throw new Error("Upload failed");
+      throw new Error(t("status.errorUpload"));
     }
 
     return response;
@@ -256,9 +263,7 @@ export const App: React.FC = () => {
   ): Promise<ChunkProcessingResult> => {
     // Check for existing errors first
     if (fileStatuses.get(fileId)?.error) {
-      throw new Error(
-        `Processing stopped due to previous error for file ${fileId}`
-      );
+      throw new Error(t("status.error"));
     }
 
     // Combine buffers
@@ -290,7 +295,7 @@ export const App: React.FC = () => {
       const response = await requestTranslation(file, config);
       const reader = response.body?.getReader();
       if (!reader) {
-        throw new Error("Failed to get stream reader");
+        throw new Error(t("status.errorDisconnect"));
       }
 
       let fileBuffer = new Uint8Array();
@@ -307,7 +312,7 @@ export const App: React.FC = () => {
           updateFileStatus(file.name, {
             status: "error",
             error:
-              error instanceof Error ? error.message : "Error processing chunk",
+              error instanceof Error ? error.message : t("status.error"),
           });
         }
       }
@@ -315,7 +320,7 @@ export const App: React.FC = () => {
       console.error("Error processing file: ", file.name, err);
       updateFileStatus(file.name, {
         status: "error",
-        error: err instanceof Error ? err.message : "Unknown error",
+        error: err instanceof Error ? err.message : t("status.error"),
       });
     }
   };

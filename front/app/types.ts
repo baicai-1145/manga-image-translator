@@ -120,7 +120,7 @@ export interface TranslationSettings {
 export interface FinishedImage {
   id: string;
   originalName: string;
-  result: Blob;
+  result: Blob | null;
   finishedAt: Date;
   settings: TranslationSettings;
 }

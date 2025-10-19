@@ -1,7 +1,8 @@
-import React from 'react';
-import { Icon } from '@iconify/react';
-import type { QueuedImage } from '@/types';
-import PreviewImage from './PreviewImage';
+import React from "react";
+import { Icon } from "@iconify/react";
+import type { QueuedImage } from "@/types";
+import PreviewImage from "./PreviewImage";
+import { useI18n } from "@/i18n";
 
 interface ImageQueueProps {
   queuedImages: QueuedImage[];
@@ -16,6 +17,8 @@ export const ImageQueue: React.FC<ImageQueueProps> = ({
   onAddToQueue,
   isProcessing,
 }) => {
+  const { t } = useI18n();
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length > 0) {
@@ -37,11 +40,11 @@ export const ImageQueue: React.FC<ImageQueueProps> = ({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-gray-800">
-          Translation Queue ({queuedImages.length})
+          {t("queue.title", { count: queuedImages.length })}
         </h3>
         {isProcessing && (
           <span className="text-sm text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
-            Processing...
+            {t("queue.processingBadge")}
           </span>
         )}
       </div>
@@ -61,13 +64,12 @@ export const ImageQueue: React.FC<ImageQueueProps> = ({
               className="w-6 h-6 mx-auto text-gray-500 mb-2"
             />
             <div className="text-gray-600 text-sm">
-              {isProcessing 
-                ? 'Add more images to queue while processing'
-                : 'Add images to queue'
-              }
+              {isProcessing
+                ? t("queue.addDuringProcessing")
+                : t("queue.addPrompt")}
             </div>
             <div className="text-gray-400 text-xs mt-1">
-              Drag & drop or click to select
+              {t("queue.dragDropHint")}
             </div>
           </div>
         </label>
@@ -100,10 +102,14 @@ export const ImageQueue: React.FC<ImageQueueProps> = ({
                   {queuedImage.file.name}
                 </div>
                 <div className="text-xs text-gray-500">
-                  Added: {queuedImage.addedAt.toLocaleTimeString()}
+                  {t("queue.addedAt", {
+                    time: queuedImage.addedAt.toLocaleTimeString(),
+                  })}
                 </div>
                 <div className="text-xs text-gray-500">
-                  Size: {(queuedImage.file.size / 1024 / 1024).toFixed(2)} MB
+                  {t("queue.size", {
+                    size: (queuedImage.file.size / 1024 / 1024).toFixed(2),
+                  })}
                 </div>
               </div>
 
@@ -118,10 +124,12 @@ export const ImageQueue: React.FC<ImageQueueProps> = ({
                     ? 'bg-green-100 text-green-800'
                     : 'bg-red-100 text-red-800'
                 }`}>
-                  {queuedImage.status === 'queued' && 'Queued'}
-                  {queuedImage.status === 'processing' && 'Processing'}
-                  {queuedImage.status === 'finished' && 'Finished'}
-                  {queuedImage.status === 'error' && 'Error'}
+                  {queuedImage.status === "queued" && t("queue.status.queued")}
+                  {queuedImage.status === "processing" &&
+                    t("queue.status.processing")}
+                  {queuedImage.status === "finished" &&
+                    t("queue.status.finished")}
+                  {queuedImage.status === "error" && t("queue.status.error")}
                 </div>
 
                 {/* Remove button - only show for queued items */}
@@ -129,7 +137,8 @@ export const ImageQueue: React.FC<ImageQueueProps> = ({
                   <button
                     onClick={() => onRemoveFromQueue(queuedImage.id)}
                     className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                    title="Remove from queue"
+                    title={t("queue.remove")}
+                    aria-label={t("queue.remove")}
                   >
                     <Icon icon="carbon:close" className="w-4 h-4" />
                   </button>

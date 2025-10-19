@@ -3,6 +3,7 @@ import { Icon } from "@iconify/react";
 import { fetchStatusText } from "@/utils/fetchStatusText";
 import type { FileStatus } from "@/types";
 import PreviewImage from "./PreviewImage";
+import { useI18n } from "@/i18n";
 export interface ImageHandlingAreaProps {
   files: File[];
   fileStatuses: Map<string, FileStatus>;
@@ -30,6 +31,7 @@ export const ImageHandlingArea: React.FC<ImageHandlingAreaProps> = ({
   clearForm,
   removeFile,
 }) => {
+  const { t } = useI18n();
   if (files.length > 0) {
     console.log("UploadArea rendering", fileStatuses.get(files[0].name));
   }
@@ -52,7 +54,7 @@ export const ImageHandlingArea: React.FC<ImageHandlingAreaProps> = ({
                 className="w-8 h-8 mx-auto text-gray-500"
               />
               <div className="mt-2 text-gray-600">
-                Drop images here or click to select and upload images
+                {t("imageHandling.uploadHint")}
               </div>
             </div>
             <input
@@ -81,6 +83,8 @@ export const ImageHandlingArea: React.FC<ImageHandlingAreaProps> = ({
                         type="button"
                         onClick={() => removeFile(file.name)}
                         className="absolute top-2 right-2 z-10 p-2 bg-red-500 rounded-lg text-white opacity-75 group-hover:opacity-100 transition-opacity hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                        title={t("imageHandling.removeFile")}
+                        aria-label={t("imageHandling.removeFile")}
                       >
                         <Icon icon="carbon:trash-can" className="w-5 h-5" />
                       </button>
@@ -99,7 +103,8 @@ export const ImageHandlingArea: React.FC<ImageHandlingAreaProps> = ({
                             status.status,
                             status.progress,
                             status.queuePos,
-                            status.error
+                            status.error,
+                            t
                           )}
                         </div>
                       </div>
@@ -114,7 +119,7 @@ export const ImageHandlingArea: React.FC<ImageHandlingAreaProps> = ({
                     {status?.error ? (
                       <div className="text-red-500 text-base flex items-center">
                         <Icon icon="carbon:warning" className="w-5 h-5 mr-1" />
-                        Error
+                        {t("generic.error")}
                       </div>
                     ) : status?.status === "finished" ? (
                       <div className="text-green-500 flex items-center">
@@ -135,7 +140,7 @@ export const ImageHandlingArea: React.FC<ImageHandlingAreaProps> = ({
               disabled={files.length === 0}
               onClick={handleSubmit}
             >
-              Translate All Images
+              {t("imageHandling.translateAll")}
             </button>
           )}
           {isProcessingAllFinished && (
@@ -143,7 +148,7 @@ export const ImageHandlingArea: React.FC<ImageHandlingAreaProps> = ({
               onClick={clearForm}
               className="w-full mt-8 py-4 px-6 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-lg"
             >
-              Start Over
+              {t("imageHandling.startOver")}
             </button>
           )}
         </>

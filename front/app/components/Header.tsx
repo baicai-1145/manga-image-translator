@@ -1,9 +1,12 @@
 import { Disclosure } from "@headlessui/react";
 import React from "react";
+import { useI18n, type SupportedLanguage } from "@/i18n";
 
 type Props = {};
 
 export const Header: React.FC<Props> = () => {
+  const { t, language, setLanguage, languages } = useI18n();
+
   return (
     <Disclosure as="nav" className="bg-white shadow">
       <div className="mx-auto max-w-7xl px-2 sm:px-6 lg:px-8">
@@ -23,9 +26,31 @@ export const Header: React.FC<Props> = () => {
                 href="/"
                 className="inline-flex items-center px-1 pt-1 font-medium text-gray-900"
               >
-                Manga Translator
+                {t("app.title")}
               </a>
             </div>
+          </div>
+          <div className="flex items-center">
+            <label
+              htmlFor="language"
+              className="sr-only"
+            >
+              {t("header.language")}
+            </label>
+            <select
+              id="language"
+              className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-700 focus:border-teal-500 focus:outline-none"
+              value={language}
+              onChange={(event) =>
+                setLanguage(event.target.value as SupportedLanguage)
+              }
+            >
+              {languages.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>

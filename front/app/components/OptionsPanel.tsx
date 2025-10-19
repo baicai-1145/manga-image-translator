@@ -11,6 +11,7 @@ import {
 } from "@/config";
 import { LabeledInput } from "@/components/LabeledInput";
 import { LabeledSelect } from "@/components/LabeledSelect";
+import { useI18n } from "@/i18n";
 
 type Props = {
   detectionResolution: string;
@@ -58,6 +59,8 @@ export const OptionsPanel: React.FC<Props> = ({
   setMaskDilationOffset,
   setInpainter,
 }) => {
+  const { t } = useI18n();
+
   return (
     <>
       {/* 1段目のセクション */}
@@ -65,9 +68,9 @@ export const OptionsPanel: React.FC<Props> = ({
         {/* Detection Resolution */}
         <LabeledSelect
           id="detectionResolution"
-          label="Detection Resolution"
+          label={t("options.detectionResolution.label")}
           icon="carbon:fit-to-screen"
-          title="Detection resolution"
+          title={t("options.detectionResolution.title")}
           value={detectionResolution}
           onChange={setDetectionResolution}
           options={detectionResolutions.map((res) => ({
@@ -79,49 +82,58 @@ export const OptionsPanel: React.FC<Props> = ({
         {/* Text Detector */}
         <LabeledSelect
           id="textDetector"
-          label="Text Detector"
+          label={t("options.textDetector.label")}
           icon="carbon:search-locate"
-          title="Text detector"
+          title={t("options.textDetector.title")}
           value={textDetector}
           onChange={setTextDetector}
-          options={textDetectorOptions}
+          options={textDetectorOptions.map((opt) => ({
+            value: opt.value,
+            label: t(`options.textDetector.option.${opt.value}`),
+          }))}
         />
 
         {/* Render text direction */}
         <LabeledSelect
           id="renderTextDirection"
-          label="Render Direction"
+          label={t("options.renderDirection.label")}
           icon="carbon:text-align-left"
-          title="Render text orientation"
+          title={t("options.renderDirection.title")}
           value={renderTextDirection}
           onChange={setRenderTextDirection}
           options={[
-            { value: "auto", label: "Auto" },
-            { value: "horizontal", label: "Horizontal" },
-            { value: "vertical", label: "Vertical" },
+            { value: "auto", label: t("options.renderDirection.option.auto") },
+            {
+              value: "horizontal",
+              label: t("options.renderDirection.option.horizontal"),
+            },
+            {
+              value: "vertical",
+              label: t("options.renderDirection.option.vertical"),
+            },
           ]}
         />
 
         {/* Translator */}
         <LabeledSelect
           id="translator"
-          label="Translator"
+          label={t("options.translator.label")}
           icon="carbon:operations-record"
-          title="Translator"
+          title={t("options.translator.title")}
           value={translator}
           onChange={(val) => setTranslator(val as TranslatorKey)}
           options={validTranslators.map((key) => ({
             value: key,
-            label: getTranslatorName(key),
+            label: key === "none" ? t("translator.none") : getTranslatorName(key),
           }))}
         />
 
         {/* Target Language */}
         <LabeledSelect
           id="targetLanguage"
-          label="Target Language"
+          label={t("options.targetLanguage.label")}
           icon="carbon:language"
-          title="Target language"
+          title={t("options.targetLanguage.title")}
           value={targetLanguage}
           onChange={setTargetLanguage}
           options={languageOptions}
@@ -133,9 +145,9 @@ export const OptionsPanel: React.FC<Props> = ({
         {/* Inpainting Size */}
         <LabeledSelect
           id="inpaintingSize"
-          label="Inpainting Size"
+          label={t("options.inpaintingSize.label")}
           icon="carbon:paint-brush"
-          title="Inpainting size"
+          title={t("options.inpaintingSize.title")}
           value={inpaintingSize}
           onChange={setInpaintingSize}
           options={inpaintingSizes.map((size) => ({
@@ -147,9 +159,9 @@ export const OptionsPanel: React.FC<Props> = ({
         {/* Unclip Ratio */}
         <LabeledInput
           id="unclipRatio"
-          label="Unclip Ratio"
+          label={t("options.unclipRatio.label")}
           icon="weui:max-window-filled"
-          title="Unclip ratio"
+          title={t("options.unclipRatio.title")}
           step={0.01}
           value={customUnclipRatio}
           onChange={setCustomUnclipRatio}
@@ -158,9 +170,9 @@ export const OptionsPanel: React.FC<Props> = ({
         {/* Box Threshold */}
         <LabeledInput
           id="boxThreshold"
-          label="Box Threshold"
+          label={t("options.boxThreshold.label")}
           icon="weui:photo-wall-outlined"
-          title="Box threshold"
+          title={t("options.boxThreshold.title")}
           step={0.01}
           value={customBoxThreshold}
           onChange={setCustomBoxThreshold}
@@ -169,9 +181,9 @@ export const OptionsPanel: React.FC<Props> = ({
         {/* Mask Dilation Offset */}
         <LabeledInput
           id="maskDilationOffset"
-          label="Mask Dilation Offset"
+          label={t("options.maskDilationOffset.label")}
           icon="material-symbols:adjust-outline"
-          title="Mask dilation offset"
+          title={t("options.maskDilationOffset.title")}
           step={1}
           value={maskDilationOffset}
           onChange={setMaskDilationOffset}
@@ -180,12 +192,15 @@ export const OptionsPanel: React.FC<Props> = ({
         {/* Inpainter */}
         <LabeledSelect
           id="inpainter"
-          label="Inpainter"
+          label={t("options.inpainter.label")}
           icon="carbon:paint-brush"
-          title="Inpainter"
+          title={t("options.inpainter.title")}
           value={inpainter}
           onChange={setInpainter}
-          options={inpainterOptions}
+          options={inpainterOptions.map((opt) => ({
+            value: opt.value,
+            label: t(`options.inpainter.option.${opt.value}`),
+          }))}
         />
       </div>
     </>

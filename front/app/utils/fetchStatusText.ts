@@ -1,44 +1,50 @@
 import type { StatusKey } from "@/types";
+import type { TranslateFn } from "@/i18n";
 
 export const fetchStatusText = (
   status: StatusKey | null,
   progress: string | null,
   queuePos: string | null,
-  error: string | null
+  error: string | null,
+  t: TranslateFn
 ) => {
   switch (status) {
     case "upload":
-      return progress ? `Uploading (${progress})` : "Uploading";
+      return progress
+        ? t("status.uploadWithProgress", { progress })
+        : t("status.upload");
     case "pending":
-      return queuePos ? `Queuing, your position is ${queuePos}` : "Processing";
+      return queuePos
+        ? t("status.pendingWithQueue", { position: queuePos })
+        : t("status.pending");
     case "detection":
-      return "Detecting texts";
+      return t("status.detection");
     case "ocr":
-      return "Running OCR";
+      return t("status.ocr");
     case "mask-generation":
-      return "Generating text mask";
+      return t("status.maskGeneration");
     case "inpainting":
-      return "Running inpainting";
+      return t("status.inpainting");
     case "upscaling":
-      return "Running upscaling";
+      return t("status.upscaling");
     case "translating":
-      return "Translating";
+      return t("status.translating");
     case "rendering":
-      return "Rendering translated texts";
+      return t("status.rendering");
     case "finished":
-      return "Downloading image";
+      return t("status.finished");
     case "error":
-      return error || "Something went wrong, please try again";
+      return error || t("status.error");
     case "error-upload":
-      return "Upload failed, please try again";
+      return t("status.errorUpload");
     case "error-lang":
-      return "Your target language is not supported by the chosen translator";
+      return t("status.errorLang");
     case "error-translating":
-      return "No text returned from the text translation service";
+      return t("status.errorTranslating");
     case "error-too-large":
-      return "Image size too large (greater than 8000x8000 px)";
+      return t("status.errorTooLarge");
     case "error-disconnect":
-      return "Lost connection to server";
+      return t("status.errorDisconnect");
     default:
       return "";
   }
