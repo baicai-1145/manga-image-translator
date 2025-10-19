@@ -7,24 +7,82 @@ import subprocess
 import sys
 from argparse import Namespace
 import asyncio
+from typing import Any, Dict, List, Optional
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 
-from fastapi import FastAPI, Request, HTTPException, Header, UploadFile, File, Form
+from fastapi import FastAPI, Request, HTTPException, Header, UploadFile, File, Form, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
+from pydantic import BaseModel
 
 from manga_translator import Config
 from server.instance import ExecutorInstance, executor_instances
 from server.myqueue import task_queue
-from server.request_extraction import get_ctx, while_streaming, TranslateRequest, BatchTranslateRequest, get_batch_ctx
+from server.request_extraction import get_ctx, while_streaming, TranslateRequest, BatchTranslateRequest, get_batch_ctx, resolve_user_id
 from server.to_json import to_translation, TranslationResponse
+from server.storage import init_db, list_tasks as storage_list_tasks, get_task as storage_get_task
+
+init_db()
 
 app = FastAPI()
 nonce = None
+
+
+class TaskRecord(BaseModel):
+    id: str
+    status: str
+    mode: Optional[str] = None
+    queue_position: Optional[int] = None
+    result_path: Optional[str] = None
+    error: Optional[str] = None
+    config: Optional[Dict[str, Any]] = None
+    meta: Optional[Dict[str, Any]] = None
+    created_at: str
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    updated_at: str
+
+
+def _to_task_record(record: Dict[str, Any]) -> TaskRecord:
+    return TaskRecord(
+        id=record.get("id"),
+        status=record.get("status"),
+        mode=record.get("mode"),
+        queue_position=record.get("queue_position"),
+        result_path=record.get("result_path"),
+        error=record.get("error"),
+        config=record.get("config"),
+        meta=record.get("meta"),
+        created_at=record.get("created_at"),
+        started_at=record.get("started_at"),
+        finished_at=record.get("finished_at"),
+        updated_at=record.get("updated_at"),
+    )
+
+
+def _attach_task_header(req: Request, response: Optional[Response] = None) -> Optional[str]:
+    task_id = getattr(req.state, "current_task_id", None)
+    if task_id and response is not None:
+        response.headers["X-Task-Id"] = task_id
+    return task_id
+
+
+def _list_tasks_for_request(req: Request, limit: int) -> List[TaskRecord]:
+    user_id = resolve_user_id(req)
+    records = storage_list_tasks(user_id, limit)
+    return [_to_task_record(record) for record in records]
+
+
+def _get_task_for_request(req: Request, task_id: str) -> TaskRecord:
+    user_id = resolve_user_id(req)
+    record = storage_get_task(user_id, task_id)
+    if not record:
+        raise HTTPException(404, detail="Task not found")
+    return _to_task_record(record)
 
 app.add_middleware(
     CORSMiddleware,
@@ -65,14 +123,19 @@ def transform_to_bytes(ctx):
     return to_translation(ctx).to_bytes()
 
 @app.post("/translate/json", response_model=TranslationResponse, tags=["api", "json"],response_description="json strucure inspired by the ichigo translator extension")
-async def json(req: Request, data: TranslateRequest):
+async def json(req: Request, data: TranslateRequest, response: Response):
     ctx = await get_ctx(req, data.config, data.image)
+    _attach_task_header(req, response)
     return to_translation(ctx)
 
 @app.post("/translate/bytes", response_class=StreamingResponse, tags=["api", "json"],response_description="custom byte structure for decoding look at examples in 'examples/response.*'")
 async def bytes(req: Request, data: TranslateRequest):
     ctx = await get_ctx(req, data.config, data.image)
-    return StreamingResponse(content=to_translation(ctx).to_bytes())
+    task_id = _attach_task_header(req)
+    stream_response = StreamingResponse(content=to_translation(ctx).to_bytes())
+    if task_id:
+        stream_response.headers["X-Task-Id"] = task_id
+    return stream_response
 
 @app.post("/translate/image", response_description="the result image", tags=["api", "json"],response_class=StreamingResponse)
 async def image(req: Request, data: TranslateRequest) -> StreamingResponse:
@@ -80,8 +143,11 @@ async def image(req: Request, data: TranslateRequest) -> StreamingResponse:
     img_byte_arr = io.BytesIO()
     ctx.result.save(img_byte_arr, format="PNG")
     img_byte_arr.seek(0)
-
-    return StreamingResponse(img_byte_arr, media_type="image/png")
+    task_id = _attach_task_header(req)
+    stream_response = StreamingResponse(img_byte_arr, media_type="image/png")
+    if task_id:
+        stream_response.headers["X-Task-Id"] = task_id
+    return stream_response
 
 @app.post("/translate/json/stream", response_class=StreamingResponse,tags=["api", "json"], response_description="A stream over elements with strucure(1byte status, 4 byte size, n byte data) status code are 0,1,2,3,4 0 is result data, 1 is progress report, 2 is error, 3 is waiting queue position, 4 is waiting for translator instance")
 async def stream_json(req: Request, data: TranslateRequest) -> StreamingResponse:
@@ -96,10 +162,11 @@ async def stream_image(req: Request, data: TranslateRequest) -> StreamingRespons
     return await while_streaming(req, transform_to_image, data.config, data.image)
 
 @app.post("/translate/with-form/json", response_model=TranslationResponse, tags=["api", "form"],response_description="json strucure inspired by the ichigo translator extension")
-async def json_form(req: Request, image: UploadFile = File(...), config: str = Form("{}")):
+async def json_form(req: Request, response: Response, image: UploadFile = File(...), config: str = Form("{}")):
     img = await image.read()
     conf = Config.parse_raw(config)
     ctx = await get_ctx(req, conf, img)
+    _attach_task_header(req, response)
     return to_translation(ctx)
 
 @app.post("/translate/with-form/bytes", response_class=StreamingResponse, tags=["api", "form"],response_description="custom byte structure for decoding look at examples in 'examples/response.*'")
@@ -107,7 +174,11 @@ async def bytes_form(req: Request, image: UploadFile = File(...), config: str = 
     img = await image.read()
     conf = Config.parse_raw(config)
     ctx = await get_ctx(req, conf, img)
-    return StreamingResponse(content=to_translation(ctx).to_bytes())
+    task_id = _attach_task_header(req)
+    stream_response = StreamingResponse(content=to_translation(ctx).to_bytes())
+    if task_id:
+        stream_response.headers["X-Task-Id"] = task_id
+    return stream_response
 
 @app.post("/translate/with-form/image", response_description="the result image", tags=["api", "form"],response_class=StreamingResponse)
 async def image_form(req: Request, image: UploadFile = File(...), config: str = Form("{}")) -> StreamingResponse:
@@ -117,8 +188,11 @@ async def image_form(req: Request, image: UploadFile = File(...), config: str = 
     img_byte_arr = io.BytesIO()
     ctx.result.save(img_byte_arr, format="PNG")
     img_byte_arr.seek(0)
-
-    return StreamingResponse(img_byte_arr, media_type="image/png")
+    task_id = _attach_task_header(req)
+    stream_response = StreamingResponse(img_byte_arr, media_type="image/png")
+    if task_id:
+        stream_response.headers["X-Task-Id"] = task_id
+    return stream_response
 
 @app.post("/translate/with-form/json/stream", response_class=StreamingResponse, tags=["api", "form"],response_description="A stream over elements with strucure(1byte status, 4 byte size, n byte data) status code are 0,1,2,3,4 0 is result data, 1 is progress report, 2 is error, 3 is waiting queue position, 4 is waiting for translator instance")
 async def stream_json_form(req: Request, image: UploadFile = File(...), config: str = Form("{}")) -> StreamingResponse:
@@ -159,6 +233,26 @@ async def queue_size() -> int:
     return len(task_queue.queue)
 
 
+@app.get("/api/tasks", response_model=List[TaskRecord], tags=["api", "tasks"])
+async def list_user_tasks(req: Request, limit: int = 50):
+    return _list_tasks_for_request(req, limit)
+
+
+@app.get("/api/tasks/{task_id}", response_model=TaskRecord, tags=["api", "tasks"])
+async def get_task_detail(task_id: str, req: Request):
+    return _get_task_for_request(req, task_id)
+
+
+@app.get("/tasks", response_model=List[TaskRecord], tags=["api", "tasks"], include_in_schema=False)
+async def list_user_tasks_legacy(req: Request, limit: int = 50):
+    return _list_tasks_for_request(req, limit)
+
+
+@app.get("/tasks/{task_id}", response_model=TaskRecord, tags=["api", "tasks"], include_in_schema=False)
+async def get_task_detail_legacy(task_id: str, req: Request):
+    return _get_task_for_request(req, task_id)
+
+
 @app.api_route("/result/{folder_name}/final.png", methods=["GET", "HEAD"], tags=["api", "file"])
 async def get_result_by_folder(folder_name: str):
     """根据文件夹名称获取翻译结果图片"""
@@ -185,9 +279,10 @@ async def get_result_by_folder(folder_name: str):
     )
 
 @app.post("/translate/batch/json", response_model=list[TranslationResponse], tags=["api", "json", "batch"])
-async def batch_json(req: Request, data: BatchTranslateRequest):
+async def batch_json(req: Request, data: BatchTranslateRequest, response: Response):
     """Batch translate images and return JSON format results"""
     results = await get_batch_ctx(req, data.config, data.images, data.batch_size)
+    _attach_task_header(req, response)
     return [to_translation(ctx) for ctx in results]
 
 @app.post("/translate/batch/images", response_description="Zip file containing translated images", tags=["api", "batch"])
@@ -214,11 +309,15 @@ async def batch_images(req: Request, data: BatchTranslateRequest):
         # Clean up temporary file
         os.unlink(tmp_file.name)
         
-        return StreamingResponse(
+        stream_response = StreamingResponse(
             io.BytesIO(zip_data),
             media_type="application/zip",
             headers={"Content-Disposition": "attachment; filename=translated_images.zip"}
         )
+        task_id = _attach_task_header(req)
+        if task_id:
+            stream_response.headers["X-Task-Id"] = task_id
+        return stream_response
 
 @app.get("/", response_class=HTMLResponse,tags=["ui"])
 async def index() -> HTMLResponse:

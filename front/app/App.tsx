@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   type StatusKey,
   processingStatuses,
@@ -8,6 +8,7 @@ import {
   type QueuedImage,
   type TranslationSettings,
   type FinishedImage,
+  type TaskRecord,
 } from "@/types";
 import { imageMimeTypes } from "@/config";
 import { OptionsPanel } from "@/components/OptionsPanel";
@@ -15,6 +16,7 @@ import { ImageHandlingArea } from "@/components/ImageHandlingArea";
 import { ImageQueue } from "@/components/ImageQueue";
 import { ResultGallery } from "@/components/ResultGallery";
 import { Header } from "@/components/Header";
+import { TaskHistory } from "@/components/TaskHistory";
 import {
   loadSettings,
   saveSettings,
@@ -22,6 +24,15 @@ import {
   addFinishedImage,
 } from "@/utils/localStorage";
 import { useI18n } from "@/i18n";
+
+const USER_ID_STORAGE_KEY = "mit-user-id";
+
+const generateUserId = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `user-${crypto.randomUUID().slice(0, 8)}`;
+  }
+  return `user-${Math.random().toString(36).slice(2, 10)}`;
+};
 
 export const App: React.FC = () => {
   const { t } = useI18n();
@@ -32,6 +43,22 @@ export const App: React.FC = () => {
   const [shouldTranslate, setShouldTranslate] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
 
+  const [userId, setUserId] = useState<string>(() => {
+    if (typeof window === "undefined") {
+      return "";
+    }
+    const stored = window.localStorage.getItem(USER_ID_STORAGE_KEY);
+    if (stored && stored.trim().length > 0) {
+      return stored;
+    }
+    const generated = generateUserId();
+    window.localStorage.setItem(USER_ID_STORAGE_KEY, generated);
+    return generated;
+  });
+  const [taskHistory, setTaskHistory] = useState<TaskRecord[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [taskError, setTaskError] = useState<string | null>(null);
+
   // New state for improved UI features
   const [queuedImages, setQueuedImages] = useState<QueuedImage[]>([]);
   const [finishedImages, setFinishedImages] = useState<FinishedImage[]>([]);
@@ -41,7 +68,7 @@ export const App: React.FC = () => {
   const [detectionResolution, setDetectionResolution] = useState("1536");
   const [textDetector, setTextDetector] = useState("default");
   const [renderTextDirection, setRenderTextDirection] = useState("auto");
-  const [translator, setTranslator] = useState<TranslatorKey>("youdao");
+  const [translator, setTranslator] = useState<TranslatorKey>("openai");
   const [targetLanguage, setTargetLanguage] = useState("CHS");
 
   const [inpaintingSize, setInpaintingSize] = useState("2048");
@@ -49,6 +76,56 @@ export const App: React.FC = () => {
   const [customBoxThreshold, setCustomBoxThreshold] = useState<number>(0.7);
   const [maskDilationOffset, setMaskDilationOffset] = useState<number>(30);
   const [inpainter, setInpainter] = useState("default");
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (!userId) {
+      const generated = generateUserId();
+      setUserId(generated);
+      window.localStorage.setItem(USER_ID_STORAGE_KEY, generated);
+    }
+  }, [userId]);
+
+  const handleUserIdChange = useCallback((value: string) => {
+    setUserId(value);
+    if (typeof window !== "undefined") {
+      if (value && value.trim().length > 0) {
+        window.localStorage.setItem(USER_ID_STORAGE_KEY, value);
+      } else {
+        window.localStorage.removeItem(USER_ID_STORAGE_KEY);
+      }
+    }
+  }, []);
+
+  const fetchTaskHistory = useCallback(async () => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (!userId) {
+      setTaskHistory([]);
+      return;
+    }
+    setTasksLoading(true);
+    try {
+      const response = await fetch(`/api/tasks?limit=100`, {
+        headers: {
+          "X-User-Id": userId,
+        },
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      const payload: TaskRecord[] = await response.json();
+      setTaskHistory(payload);
+      setTaskError(null);
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setTasksLoading(false);
+    }
+  }, [userId]);
 
   // Computed State (useMemo)
   const isProcessing = useMemo(() => {
@@ -74,6 +151,10 @@ export const App: React.FC = () => {
   }, [files, fileStatuses]);
 
   // Effects
+  useEffect(() => {
+    fetchTaskHistory();
+  }, [fetchTaskHistory]);
+
   /** Load saved settings and finished images from localStorage */
   useEffect(() => {
     const savedSettings = loadSettings();
@@ -243,9 +324,15 @@ export const App: React.FC = () => {
     formData.append("image", file);
     formData.append("config", config);
 
+    const headers: Record<string, string> = {};
+    if (userId && userId.trim().length > 0) {
+      headers["X-User-Id"] = userId;
+    }
+
     const response = await fetch(`/api/translate/with-form/image/stream`, {
       method: "POST",
       body: formData,
+      headers,
     });
 
     if (response.status !== 200) {
@@ -336,6 +423,8 @@ export const App: React.FC = () => {
       );
     } catch (err) {
       console.error("Translation process failed:", err);
+    } finally {
+      await fetchTaskHistory();
     }
   };
 
@@ -411,6 +500,7 @@ export const App: React.FC = () => {
         
         setFinishedImages(prev => [finishedImage, ...prev]);
         addFinishedImage(finishedImage);
+        void fetchTaskHistory();
         break;
       case 1: // 翻訳中
         const newStatus = decodedData as StatusKey;
@@ -421,6 +511,7 @@ export const App: React.FC = () => {
           status: "error",
           error: decodedData,
         });
+        void fetchTaskHistory();
         break;
       case 3: // キューに追加された
         updateFileStatus(fileId, {
@@ -442,7 +533,7 @@ export const App: React.FC = () => {
 
   return (
     <div>
-      <Header />
+      <Header userId={userId} onUserIdChange={handleUserIdChange} />
       <div className="bg-gray-100 min-h-screen flex flex-col pt-10 items-center">
         <div className="bg-white shadow-md rounded-lg p-6 w-full max-w-6xl space-y-6">
           <OptionsPanel
@@ -498,6 +589,17 @@ export const App: React.FC = () => {
             <ResultGallery
               finishedImages={finishedImages}
               onClearGallery={clearGallery}
+            />
+          </div>
+
+          {/* Task History */}
+          <div className="border-t pt-6">
+            <TaskHistory
+              tasks={taskHistory}
+              isLoading={tasksLoading}
+              error={taskError}
+              onRefresh={fetchTaskHistory}
+              userId={userId}
             />
           </div>
         </div>

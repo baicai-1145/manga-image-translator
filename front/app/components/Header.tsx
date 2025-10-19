@@ -2,16 +2,19 @@ import { Disclosure } from "@headlessui/react";
 import React from "react";
 import { useI18n, type SupportedLanguage } from "@/i18n";
 
-type Props = {};
+type Props = {
+  userId: string;
+  onUserIdChange: (value: string) => void;
+};
 
-export const Header: React.FC<Props> = () => {
+export const Header: React.FC<Props> = ({ userId, onUserIdChange }) => {
   const { t, language, setLanguage, languages } = useI18n();
 
   return (
     <Disclosure as="nav" className="bg-white shadow">
       <div className="mx-auto max-w-7xl px-2 sm:px-6 lg:px-8">
-        <div className="relative flex h-16 justify-between">
-          <div className="flex flex-1 items-center justify-center sm:items-stretch sm:justify-start">
+        <div className="relative flex flex-col gap-2 sm:flex-row sm:h-16 sm:items-center sm:justify-between py-3 sm:py-0">
+          <div className="flex flex-1 items-center justify-between sm:items-stretch sm:justify-start">
             <div className="flex shrink-0 items-center text-teal-500">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -30,27 +33,38 @@ export const Header: React.FC<Props> = () => {
               </a>
             </div>
           </div>
-          <div className="flex items-center">
-            <label
-              htmlFor="language"
-              className="sr-only"
-            >
-              {t("header.language")}
-            </label>
-            <select
-              id="language"
-              className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-700 focus:border-teal-500 focus:outline-none"
-              value={language}
-              onChange={(event) =>
-                setLanguage(event.target.value as SupportedLanguage)
-              }
-            >
-              {languages.map((option) => (
-                <option key={option.code} value={option.code}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+            <div className="flex items-center gap-2">
+              <label htmlFor="language" className="text-sm text-gray-600">
+                {t("header.language")}
+              </label>
+              <select
+                id="language"
+                className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-700 focus:border-teal-500 focus:outline-none"
+                value={language}
+                onChange={(event) =>
+                  setLanguage(event.target.value as SupportedLanguage)
+                }
+              >
+                {languages.map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label htmlFor="userId" className="text-sm text-gray-600">
+                {t("header.userId")}
+              </label>
+              <input
+                id="userId"
+                value={userId}
+                onChange={(event) => onUserIdChange(event.target.value)}
+                placeholder={t("header.userIdPlaceholder")}
+                className="w-40 rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-700 focus:border-teal-500 focus:outline-none"
+              />
+            </div>
           </div>
         </div>
       </div>

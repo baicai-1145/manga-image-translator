@@ -124,3 +124,18 @@ export interface FinishedImage {
   finishedAt: Date;
   settings: TranslationSettings;
 }
+
+export interface TaskRecord {
+  id: string;
+  status: string;
+  mode?: string | null;
+  queue_position?: number | null;
+  result_path?: string | null;
+  error?: string | null;
+  config?: Record<string, unknown> | null;
+  meta?: Record<string, unknown> | null;
+  created_at: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  updated_at: string;
+}

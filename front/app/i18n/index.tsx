@@ -27,6 +27,8 @@ const translationTable: Record<SupportedLanguage, TranslationDictionary> = {
   en: {
     "app.title": "Manga Translator",
     "header.language": "Language",
+    "header.userId": "User ID",
+    "header.userIdPlaceholder": "Enter or generate ID",
     "options.detectionResolution.label": "Detection Resolution",
     "options.detectionResolution.title": "Detection resolution",
     "options.textDetector.label": "Text Detector",
@@ -116,10 +118,27 @@ const translationTable: Record<SupportedLanguage, TranslationDictionary> = {
     "errorBoundary.404.title": "404",
     "errorBoundary.404.message": "The requested page could not be found.",
     "errorBoundary.generic": "Error",
+    "tasks.title": "Task History",
+    "tasks.currentUser": "Current user: {{userId}}",
+    "tasks.anonymous": "anonymous",
+    "tasks.refresh": "Refresh",
+    "tasks.loading": "Loading tasks...",
+    "tasks.empty": "No tasks have been submitted yet.",
+    "tasks.status": "Status",
+    "tasks.mode": "Mode",
+    "tasks.queue": "Queue",
+    "tasks.createdAt": "Created",
+    "tasks.finishedAt": "Finished",
+    "tasks.result": "Result",
+    "tasks.error": "Error",
+    "tasks.errorMessage": "Failed to load tasks: {{message}}",
+    "tasks.viewResult": "View result",
   },
   zh: {
     "app.title": "漫画翻译器",
     "header.language": "语言",
+    "header.userId": "用户标识",
+    "header.userIdPlaceholder": "输入或生成标识",
     "options.detectionResolution.label": "检测分辨率",
     "options.detectionResolution.title": "文本检测使用的分辨率",
     "options.textDetector.label": "文本检测器",
@@ -205,6 +224,21 @@ const translationTable: Record<SupportedLanguage, TranslationDictionary> = {
     "errorBoundary.404.title": "404",
     "errorBoundary.404.message": "未找到请求的页面。",
     "errorBoundary.generic": "错误",
+    "tasks.title": "任务记录",
+    "tasks.currentUser": "当前用户：{{userId}}",
+    "tasks.anonymous": "匿名",
+    "tasks.refresh": "刷新",
+    "tasks.loading": "正在加载任务...",
+    "tasks.empty": "暂无任务记录。",
+    "tasks.status": "状态",
+    "tasks.mode": "模式",
+    "tasks.queue": "队列位置",
+    "tasks.createdAt": "创建时间",
+    "tasks.finishedAt": "完成时间",
+    "tasks.result": "结果",
+    "tasks.error": "错误信息",
+    "tasks.errorMessage": "获取任务失败：{{message}}",
+    "tasks.viewResult": "查看结果",
   },
 };
 
@@ -213,7 +247,7 @@ const LANGUAGES: { code: SupportedLanguage; label: string }[] = [
   { code: "zh", label: "简体中文" },
 ];
 
-const FALLBACK_LANGUAGE: SupportedLanguage = "en";
+const FALLBACK_LANGUAGE: SupportedLanguage = "zh";
 
 const I18nContext = createContext<I18nContextValue | undefined>(undefined);
 
