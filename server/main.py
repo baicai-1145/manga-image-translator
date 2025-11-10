@@ -375,10 +375,13 @@ def start_translator_client_proc(host: str, port: int, nonce: str, params: Names
 
 def prepare(args):
     global nonce
-    if args.nonce is None:
-        nonce = os.getenv('MT_WEB_NONCE', generate_nonce())
+    # Treat empty string the same as not provided: auto-generate or read from env
+    provided = getattr(args, 'nonce', None)
+    if not provided:
+        env_nonce = os.getenv('MT_WEB_NONCE')
+        nonce = env_nonce if (env_nonce and env_nonce.strip()) else generate_nonce()
     else:
-        nonce = args.nonce
+        nonce = provided
     if args.start_instance:
         return start_translator_client_proc(args.host, args.port + 1, nonce, args)
     folder_name= "upload-cache"

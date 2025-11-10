@@ -87,6 +87,7 @@ class Detector(str, Enum):
     ctd = "ctd"
     craft = "craft"
     paddle = "paddle"
+    rapidocr = "rapidocr"
     none = "none"
 
 class Inpainter(str, Enum):
@@ -106,6 +107,7 @@ class Ocr(str, Enum):
     ocr48px = "48px"
     ocr48px_ctc = "48px_ctc"
     mocr = "mocr"
+    rapidocr = "rapidocr"
 
 class Translator(str, Enum):
     youdao = "youdao"

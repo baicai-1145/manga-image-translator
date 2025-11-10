@@ -2,7 +2,6 @@ import os
 import gc
 import pandas as pd
 import numpy as np
-from onnxruntime import InferenceSession
 from typing import Tuple, List, Dict
 from io import BytesIO
 from PIL import Image
@@ -11,6 +10,12 @@ import cv2
 from pathlib import Path
 
 from tqdm import tqdm
+
+# 延迟导入 onnxruntime，避免在未使用该功能时阻塞整个服务启动
+try:
+    import onnxruntime as ort  # type: ignore
+except Exception:
+    ort = None
 
 def make_square(img, target_size):
     old_size = img.shape[:2]
@@ -39,7 +44,25 @@ def smart_resize(img, size):
 
 class Tagger :
     def __init__(self, filename) -> None:
-        self.model = InferenceSession(filename, providers=['CUDAExecutionProvider'])
+        if ort is None:
+            raise ImportError(
+                "onnxruntime is required for Tagger but was not found. "
+                "Please install one of: 'onnxruntime', 'onnxruntime-gpu' (CUDA), or 'onnxruntime-directml' (Windows)."
+            )
+        if not hasattr(ort, "InferenceSession"):
+            raise ImportError(
+                "onnxruntime is installed but missing InferenceSession. "
+                "Please reinstall: pip install --upgrade --force-reinstall onnxruntime (or onnxruntime-gpu/onnxruntime-directml)."
+            )
+        # 根据可用后端选择 Provider，优先 GPU，回退 CPU，避免因 Provider 不存在而报错
+        providers = list(ort.get_available_providers()) if hasattr(ort, "get_available_providers") else []
+        chosen = []
+        for p in ("CUDAExecutionProvider", "DmlExecutionProvider", "CPUExecutionProvider"):
+            if p in providers:
+                chosen.append(p)
+        if not chosen:
+            chosen = ["CPUExecutionProvider"]
+        self.model = ort.InferenceSession(filename, providers=chosen)
         [root, _] = os.path.split(filename)
         self.tags = pd.read_csv(os.path.join(root, 'selected_tags.csv') if root else 'selected_tags.csv')
         _, self.height, _, _ = self.model.get_inputs()[0].shape

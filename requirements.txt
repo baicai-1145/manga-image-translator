@@ -12,7 +12,7 @@ requests
 cryptography
 freetype-py
 aiohttp
-tqdm
+rapidocr
 deepl
 ImageHash
 kornia
