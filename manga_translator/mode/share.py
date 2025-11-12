@@ -131,7 +131,13 @@ class MangaShare:
 
             # 根据端点类型决定是否使用占位符优化
             config = attr.get('config')
-            self.manga._is_streaming_mode = getattr(config, '_web_frontend_optimized', False) if config else False
+            # 1) 优先从请求头判断（server 会设置 X-Web-Frontend: 1）
+            header_flag = request.headers.get('X-Web-Frontend', '')
+            if header_flag == '1':
+                self.manga._is_streaming_mode = True
+            else:
+                # 2) 回退从 config 的动态属性判断
+                self.manga._is_streaming_mode = getattr(config, '_web_frontend_optimized', False) if config else False
 
             # streaming response
             streaming_response = StreamingResponse(self.progress_stream(), media_type="application/octet-stream")

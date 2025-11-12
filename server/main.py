@@ -24,7 +24,7 @@ from server.instance import ExecutorInstance, executor_instances
 from server.myqueue import task_queue
 from server.request_extraction import get_ctx, while_streaming, TranslateRequest, BatchTranslateRequest, get_batch_ctx, resolve_user_id
 from server.to_json import to_translation, TranslationResponse
-from server.storage import init_db, list_tasks as storage_list_tasks, get_task as storage_get_task
+from server.storage import init_db, list_tasks as storage_list_tasks, get_task as storage_get_task, update_task as storage_update_task
 
 init_db()
 
@@ -101,6 +101,7 @@ async def register_instance(instance: ExecutorInstance, req: Request, req_nonce:
     if req_nonce != nonce:
         raise HTTPException(401, detail="Invalid nonce")
     instance.ip = req.client.host
+    instance.nonce = req_nonce
     executor_instances.register(instance)
 
 def transform_to_image(ctx):
@@ -289,35 +290,64 @@ async def batch_json(req: Request, data: BatchTranslateRequest, response: Respon
 async def batch_images(req: Request, data: BatchTranslateRequest):
     """Batch translate images and return zip archive containing translated images"""
     import zipfile
-    import tempfile
-    
+
     results = await get_batch_ctx(req, data.config, data.images, data.batch_size)
-    
-    # Create temporary ZIP file
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp_file:
-        with zipfile.ZipFile(tmp_file, 'w') as zip_file:
-            for i, ctx in enumerate(results):
-                if ctx.result:
-                    img_byte_arr = io.BytesIO()
-                    ctx.result.save(img_byte_arr, format="PNG")
-                    zip_file.writestr(f"translated_{i+1}.png", img_byte_arr.getvalue())
-        
-        # Return ZIP file
-        with open(tmp_file.name, 'rb') as f:
-            zip_data = f.read()
-        
-        # Clean up temporary file
-        os.unlink(tmp_file.name)
-        
-        stream_response = StreamingResponse(
-            io.BytesIO(zip_data),
-            media_type="application/zip",
-            headers={"Content-Disposition": "attachment; filename=translated_images.zip"}
-        )
-        task_id = _attach_task_header(req)
-        if task_id:
-            stream_response.headers["X-Task-Id"] = task_id
-        return stream_response
+
+    # Build ZIP in memory to avoid Windows file locking issues
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', compression=zipfile.ZIP_DEFLATED) as zip_file:
+        for i, ctx in enumerate(results):
+            if getattr(ctx, "result", None):
+                img_byte_arr = io.BytesIO()
+                ctx.result.save(img_byte_arr, format="PNG")
+                zip_file.writestr(f"translated_{i+1}.png", img_byte_arr.getvalue())
+
+    zip_buffer.seek(0)
+
+    # Persist batch results on disk for per-image preview via /result
+    # Folder is task_id to keep stable mapping
+    task_id = getattr(req.state, "current_task_id", None)
+    if task_id:
+        result_dir = "../result"
+        folder_path = os.path.join(result_dir, task_id)
+        os.makedirs(folder_path, exist_ok=True)
+        page_files: list[str] = []
+        for i, ctx in enumerate(results):
+            if getattr(ctx, "result", None):
+                filename = f"translated_{i+1}.png"
+                save_path = os.path.join(folder_path, filename)
+                try:
+                    ctx.result.save(save_path, format="PNG")
+                    page_files.append(filename)
+                except Exception:
+                    # ignore individual save errors to not break entire response
+                    pass
+        # Maintain compatibility with existing tooling by copying first page to final.png if available
+        if page_files:
+            first_path = os.path.join(folder_path, page_files[0])
+            final_path = os.path.join(folder_path, "final.png")
+            try:
+                if os.path.exists(first_path):
+                    with open(first_path, "rb") as src, open(final_path, "wb") as dst:
+                        dst.write(src.read())
+            except Exception:
+                pass
+        # Update task record with result_path and pages meta
+        try:
+            meta = {"stream": False, "total_images": len(results), "batch_size": data.batch_size, "pages": page_files}
+            storage_update_task(task_id, result_path=task_id, meta=meta)
+        except Exception:
+            pass
+
+    stream_response = StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=translated_images.zip"}
+    )
+    tid_for_header = _attach_task_header(req)
+    if tid_for_header:
+        stream_response.headers["X-Task-Id"] = tid_for_header
+    return stream_response
 
 @app.get("/", response_class=HTMLResponse,tags=["ui"])
 async def index() -> HTMLResponse:
@@ -362,7 +392,8 @@ def start_translator_client_proc(host: str, port: int, nonce: str, params: Names
     base_path = os.path.dirname(os.path.abspath(__file__))
     parent = os.path.dirname(base_path)
     proc = subprocess.Popen(cmds, cwd=parent)
-    executor_instances.register(ExecutorInstance(ip=host, port=port))
+    # 将 nonce 保存在实例上，后续调用 /execute/* 时通过 X-Nonce 进行内部鉴权
+    executor_instances.register(ExecutorInstance(ip=host, port=port, nonce=nonce))
 
     def handle_exit_signals(signal, frame):
         proc.terminate()

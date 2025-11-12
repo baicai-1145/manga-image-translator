@@ -1,5 +1,5 @@
 import pickle
-from typing import Mapping, Optional, Callable
+from typing import Mapping, Optional, Callable, Any, Mapping as TMapping
 
 import aiohttp
 from PIL.Image import Image
@@ -31,6 +31,18 @@ async def fetch_data(url, image: Image, config: Config, headers: Mapping[str, st
             else:
                 raise HTTPException(response.status, detail=await response.text())
 
+async def fetch_data_generic(url: str, payload: TMapping[str, Any], headers: Mapping[str, str] = {}):
+    """
+    Post arbitrary pickled payload and return unpickled result.
+    Useful for methods whose signature does not match (image, config).
+    """
+    data = pickle.dumps(payload)
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, data=data, headers=headers) as response:
+            if response.status == 200:
+                return pickle.loads(await response.read())
+            else:
+                raise HTTPException(response.status, detail=await response.text())
 async def process_stream(response, sender: NotifyType):
     buffer = b''
 
@@ -59,4 +71,3 @@ def extract_header(buffer):
     status = int.from_bytes(buffer[0:1], byteorder='big')
     expected_size = int.from_bytes(buffer[1:5], byteorder='big')
     return status, expected_size
-
