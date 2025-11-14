@@ -13,6 +13,12 @@
       </select>
     </label>
     <label>
+      OCR 引擎
+      <select v-model="s.ocrEngine">
+        <option v-for="opt in ocrOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+      </select>
+    </label>
+    <label>
       文本方向
       <select v-model="s.renderTextDirection">
         <option value="auto">自动</option>
@@ -61,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { useSettingsStore, detectionResolutions, inpaintingSizes, languageOptions, textDetectorOptions, inpainterOptions, validTranslators } from '@/stores/settingsStore';
+  import { useSettingsStore, detectionResolutions, inpaintingSizes, languageOptions, textDetectorOptions, inpainterOptions, validTranslators, ocrOptions } from '@/stores/settingsStore';
 
 const s = useSettingsStore();
 function formatTranslator(key: string) {

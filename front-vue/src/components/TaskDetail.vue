@@ -9,16 +9,6 @@
       </div>
     </header>
     <div class="grid">
-      <div class="info">
-        <p><b>ID：</b><span class="mono">{{ task.id }}</span></p>
-        <p><b>状态：</b>{{ task.status }}</p>
-        <p><b>模式：</b>{{ task.mode ?? '-' }}</p>
-        <p><b>队列：</b>{{ task.queue_position ?? '-' }}</p>
-        <p><b>创建：</b>{{ task.created_at }}</p>
-        <p><b>完成：</b>{{ task.finished_at ?? '-' }}</p>
-        <p v-if="task.error" class="error"><b>错误：</b>{{ task.error }}</p>
-        <p v-if="folder"><b>结果目录：</b><span class="mono">{{ folder }}</span></p>
-      </div>
       <!-- Batch gallery -->
       <div class="gallery" v-if="isBatch && batchImages.length">
         <div class="hint">共 {{ batchImages.length }} 张</div>
@@ -48,6 +38,17 @@
         <p v-if="!folder">尚无结果目录，可在任务完成后点击“刷新”。</p>
         <p v-else-if="imgError">图片暂不可用，请稍后点击“刷新”。</p>
       </div>
+      <!-- Move task info after preview/gallery -->
+      <div class="info">
+        <p><b>ID：</b><span class="mono">{{ task.id }}</span></p>
+        <p><b>状态：</b>{{ task.status }}</p>
+        <p><b>模式：</b>{{ task.mode ?? '-' }}</p>
+        <p><b>队列：</b>{{ task.queue_position ?? '-' }}</p>
+        <p><b>创建：</b>{{ task.created_at }}</p>
+        <p><b>完成：</b>{{ task.finished_at ?? '-' }}</p>
+        <p v-if="task.error" class="error"><b>错误：</b>{{ task.error }}</p>
+        <p v-if="folder"><b>结果目录：</b><span class="mono">{{ folder }}</span></p>
+      </div>
       <details v-if="showDebug" class="debug" open>
         <summary>调试信息（点击收起）</summary>
         <div class="kv"><b>result_path:</b><code>{{ task.result_path ?? '-' }}</code></div>
@@ -65,6 +66,7 @@
         <div class="spacer" />
         <button class="ghost" @click.stop="fitOriginal">原尺寸</button>
         <button class="ghost" @click.stop="fitWidth">适配宽度</button>
+        <button class="ghost" @click.stop="toggleCompare">{{ compareMode ? '退出对照' : '对照模式' }}</button>
         <button class="ghost" @click.stop="zoomOut">-</button>
         <button class="ghost" @click.stop="resetZoom">100%</button>
         <button class="ghost" @click.stop="zoomIn">+</button>
@@ -73,14 +75,26 @@
       <div class="nav left" @click.stop="prevImage" aria-label="上一张">‹</div>
       <div class="nav right" @click.stop="nextImage" aria-label="下一张">›</div>
       <div class="viewer" ref="viewerRef">
-        <img
-          v-if="currentImage"
-          :src="currentImage"
-          ref="imgEl"
-          :style="imgStyle"
-          alt="preview"
-          @load="onImageLoad"
-        />
+        <template v-if="compareMode">
+          <div class="compare">
+            <div class="col">
+              <img :src="currentOriginal" :style="compareLeftStyle" ref="origImgEl" @load="onCompareLoad" alt="original" />
+            </div>
+            <div class="col">
+              <img :src="currentImage" :style="compareRightStyle" ref="transImgEl" @load="onCompareLoad" alt="translated" />
+            </div>
+          </div>
+        </template>
+        <template v-else>
+          <img
+            v-if="currentImage"
+            :src="currentImage"
+            ref="imgEl"
+            :style="imgStyle"
+            alt="preview"
+            @load="onImageLoad"
+          />
+        </template>
       </div>
     </div>
   </section>
@@ -162,8 +176,48 @@ const imgEl = ref<HTMLImageElement | null>(null);
 const naturalW = ref(0);
 const naturalH = ref(0);
 const viewerReady = ref(false); // 防止初始闪动：就绪后再显示图片
+const imgWidthPx = ref(0);      // 直接以像素宽控制显示，避免 transform 与 CSS 叠加
+const compareMode = ref(false);
+const origImgEl = ref<HTMLImageElement | null>(null);
+const transImgEl = ref<HTMLImageElement | null>(null);
+const origNatW = ref(0), origNatH = ref(0);
+const transNatW = ref(0), transNatH = ref(0);
+const compareLeftPx = ref(0), compareRightPx = ref(0);
 const allImages = computed(() => (isBatch.value ? batchImages.value : (imgUrl.value ? [imgUrl.value] : [])));
 const currentImage = computed(() => (viewerIndex.value >= 0 && viewerIndex.value < allImages.value.length ? allImages.value[viewerIndex.value] : ''));
+const currentOriginal = computed(() => {
+  if (!folder.value) return '';
+  if (isBatch.value) {
+    const pages = batchPagesFromMeta.value;
+    const idx = viewerIndex.value;
+    const origName = pages[idx]?.replace(/^translated_/, 'original_');
+    return origName ? getResultFileUrl(folder.value, origName) : '';
+  }
+  return getResultFileUrl(folder.value, 'original.png');
+});
+function toggleCompare() {
+  compareMode.value = !compareMode.value;
+  nextTick(() => adjustCompareSize());
+}
+function onCompareLoad() {
+  if (origImgEl.value) { origNatW.value = origImgEl.value.naturalWidth || 0; origNatH.value = origImgEl.value.naturalHeight || 0; }
+  if (transImgEl.value) { transNatW.value = transImgEl.value.naturalWidth || 0; transNatH.value = transImgEl.value.naturalHeight || 0; }
+  adjustCompareSize();
+}
+function adjustCompareSize() {
+  const WIN_W = window.innerWidth;
+  const MAX_W = Math.floor(WIN_W * 0.95);
+  const gap = 24; // px between columns and paddings
+  const half = Math.max(1, Math.floor((MAX_W - gap) / 2));
+  if (!origNatW.value || !transNatW.value) return;
+  // 同一缩放倍数 S，保证两图等比缩放
+  const sByWidth = Math.min(half / origNatW.value, half / transNatW.value, 4);
+  const s = Math.max(0.25, sByWidth);
+  compareLeftPx.value = Math.round(origNatW.value * s);
+  compareRightPx.value = Math.round(transNatW.value * s);
+}
+const compareLeftStyle = computed(() => ({ width: compareLeftPx.value ? `${compareLeftPx.value}px` : 'auto', height: 'auto', maxHeight: 'none' }));
+const compareRightStyle = computed(() => ({ width: compareRightPx.value ? `${compareRightPx.value}px` : 'auto', height: 'auto', maxHeight: 'none' }));
 
 function openViewer(i: number) {
   if (!allImages.value.length) return;
@@ -188,15 +242,14 @@ function prevImage() {
 function zoomIn() { zoom.value = Math.min(4, +(zoom.value + 0.25).toFixed(2)); }
 function zoomOut() { zoom.value = Math.max(0.25, +(zoom.value - 0.25).toFixed(2)); }
 function resetZoom() { zoom.value = 1; }
-function fitOriginal() { zoom.value = 1; }
+function fitOriginal() {
+  const rect = viewerRef.value?.getBoundingClientRect();
+  const MAX_W = Math.floor(rect?.width ?? window.innerWidth);
+  imgWidthPx.value = Math.min(naturalW.value, MAX_W);
+}
 function fitWidth() {
-  const el = imgEl.value;
-  if (!el) return;
-  const natW = el.naturalWidth || 0;
-  if (natW <= 0) return;
-  const targetW = Math.floor(window.innerWidth); // 目标贴合窗口宽
-  const scale = targetW / natW;
-  zoom.value = Math.max(0.25, Math.min(4, +scale.toFixed(2)));
+  const MAX_W = Math.floor(viewerRef.value?.getBoundingClientRect().width || window.innerWidth);
+  imgWidthPx.value = MAX_W;
 }
 function onKeydown(e: KeyboardEvent) {
   if (!viewerOpen.value) return;
@@ -218,45 +271,52 @@ function onImageLoad() {
   adjustZoomToMinWidth();
   // 完整计算后再显示，避免“放大又缩小”的闪动
   viewerReady.value = true;
+  // 确保长图从顶部开始显示
+  try { viewerRef.value?.scrollTo({ top: 0, left: 0, behavior: 'auto' }); } catch {}
+  // 控制台输出尺寸信息
+  const rect = viewerRef.value?.getBoundingClientRect();
+  const maxW = Math.floor((rect?.width ?? window.innerWidth));
+  console.info(
+    `[Lightbox] onload: natural=${naturalW.value}x${naturalH.value}, containerW=${maxW}, widthPx=${imgWidthPx.value}`
+  );
 }
 
 function adjustZoomToMinWidth() {
   const container = viewerRef.value;
   const img = imgEl.value;
   if (!container || !img) return;
-  // 规则：最小宽 = 30% 窗口宽，最小高 = 50% 窗口高；最大宽 = 窗口宽，高不限（容器内可滚动）
-  const MAX_W = Math.floor(window.innerWidth);   // 最大宽 = 窗口宽
-  const MAX_H = Infinity;                        // 高度不限制，由容器滚动
-  const MIN_W = Math.floor(window.innerWidth * 0.3);
-  const MIN_H = Math.floor(window.innerHeight * 0.5);
+  // 规则（以“可视容器”作为基准，更贴近真实显示区域）：
+  // 最小宽 = 容器宽的 30%，最小高 = 容器高的 50%；最大宽 = 容器宽；高度不限（容器滚动）
+  const rect = viewerRef.value?.getBoundingClientRect();
+  const WIN_W = window.innerWidth;
+  const MAX_W = Math.floor(WIN_W * 0.95);               // 最大 = 窗口宽 95%
+  const MIN_W = Math.floor(WIN_W * 0.30);               // 最小 = 窗口宽 30%
+  const MIN_H = Math.floor(window.innerHeight * 0.5);   // 最小高 = 窗口高 50%
   const natW = img.naturalWidth || 0;
   const natH = img.naturalHeight || 0;
   if (natW <= 0 || natH <= 0) return;
 
   // A) 原图在 [最小, 最大] 范围并且宽小于窗口宽 → 按原分辨率显示
   if (natW >= MIN_W && natH >= MIN_H && natW < MAX_W) {
-    zoom.value = 1;
+    imgWidthPx.value = natW;
     return;
   }
-  // B) 原图宽超过窗口宽 → 等比缩小至窗口宽
-  if (natW >= MAX_W) {
-    const scale = MAX_W / natW;
-    zoom.value = Math.max(0.25, Math.min(4, +scale.toFixed(2)));
-    return;
-  }
+  // B) 原图宽超过容器宽 → 交由 CSS 限制贴合容器宽，不叠加 transform（避免双重缩放）
+  if (natW >= MAX_W) { imgWidthPx.value = MAX_W; return; }
   // C) 原图小于最小可读尺寸 → 放大到不小于最小，并且不超过窗口宽
   const scaleToMin = Math.max(MIN_W / natW, MIN_H / natH);
   const capByMaxW = MAX_W / natW;
   const scale = Math.min(scaleToMin, capByMaxW);
-  zoom.value = Math.max(0.25, Math.min(4, +scale.toFixed(2)));
+  imgWidthPx.value = Math.round(natW * Math.max(0.25, Math.min(4, +scale.toFixed(2))));
 }
 
 const imgStyle = computed(() => {
   // 高不限（容器内滚动），只限制最大宽到视窗宽
   return {
-    transform: `scale(${zoom.value})`,
     maxHeight: 'none',
-    maxWidth: '100vw',
+    width: imgWidthPx.value ? `${imgWidthPx.value}px` : 'auto',
+    height: 'auto',
+    maxWidth: '100%', // 相对于容器宽
     opacity: viewerReady.value ? 1 : 0
   } as Record<string, string>;
 });
@@ -327,7 +387,7 @@ watch(
 .actions { display: flex; gap: 0.5rem; }
 .grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 1rem;
 }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
@@ -410,9 +470,20 @@ watch(
   border: 1px solid #333;
   box-shadow: 0 24px 60px rgba(0,0,0,0.5);
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* 顶部对齐，避免长图初始显示在中间 */
   justify-content: center;
   margin: 0 auto;
+}
+.compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  width: 95vw;
+  align-items: start;
+}
+.compare .col img {
+  height: auto;
+  max-height: none !important;
 }
 .viewer img {
   display: block;

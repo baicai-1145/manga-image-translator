@@ -301,6 +301,14 @@ async def batch_images(req: Request, data: BatchTranslateRequest):
                 img_byte_arr = io.BytesIO()
                 ctx.result.save(img_byte_arr, format="PNG")
                 zip_file.writestr(f"translated_{i+1}.png", img_byte_arr.getvalue())
+            # save original as well for side-by-side compare
+            try:
+                if getattr(ctx, "input", None):
+                    orig_buf = io.BytesIO()
+                    ctx.input.save(orig_buf, format="PNG")
+                    zip_file.writestr(f"original_{i+1}.png", orig_buf.getvalue())
+            except Exception:
+                pass
 
     zip_buffer.seek(0)
 
@@ -322,6 +330,13 @@ async def batch_images(req: Request, data: BatchTranslateRequest):
                 except Exception:
                     # ignore individual save errors to not break entire response
                     pass
+            # persist original
+            try:
+                if getattr(ctx, "input", None):
+                    orig_path = os.path.join(folder_path, f"original_{i+1}.png")
+                    ctx.input.save(orig_path, format="PNG")
+            except Exception:
+                pass
         # Maintain compatibility with existing tooling by copying first page to final.png if available
         if page_files:
             first_path = os.path.join(folder_path, page_files[0])

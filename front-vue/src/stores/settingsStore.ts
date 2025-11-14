@@ -13,7 +13,15 @@ export const languageOptions = [
 export const textDetectorOptions = [
   { value: 'default', label: 'Default' },
   { value: 'ctd', label: 'CTD' },
-  { value: 'paddle', label: 'Paddle' }
+  { value: 'paddle', label: 'Paddle' },
+  { value: 'rapidocr', label: 'RapidOCR' }
+];
+export const ocrOptions = [
+  { value: '32px', label: 'OCR 32px' },
+  { value: '48px', label: 'OCR 48px' },
+  { value: '48px_ctc', label: 'OCR 48px CTC' },
+  { value: 'mocr', label: 'Manga OCR' },
+  { value: 'rapidocr', label: 'RapidOCR' }
 ];
 export const inpainterOptions = [
   { value: 'default', label: 'Default' },
@@ -32,6 +40,7 @@ export const validTranslators: TranslatorKey[] = [
 interface SettingsState {
   detectionResolution: string;
   textDetector: string;
+  ocrEngine: string;
   renderTextDirection: string;
   translator: TranslatorKey;
   targetLanguage: string;
@@ -47,6 +56,7 @@ export const useSettingsStore = defineStore('settings', {
     // Align defaults with original front (React) App.tsx
     detectionResolution: '1536',
     textDetector: 'default',
+    ocrEngine: 'rapidocr',
     renderTextDirection: 'auto',
     translator: 'openai',
     targetLanguage: 'CHS',
@@ -64,6 +74,9 @@ export const useSettingsStore = defineStore('settings', {
           detection_size: Number(state.detectionResolution),
           box_threshold: state.customBoxThreshold,
           unclip_ratio: state.customUnclipRatio
+        },
+        ocr: {
+          ocr: state.ocrEngine
         },
         render: {
           direction: state.renderTextDirection

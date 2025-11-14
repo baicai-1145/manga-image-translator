@@ -130,6 +130,18 @@ async def while_streaming(req: Request, transform, config: Config, image: bytes 
                 result_path=debug_folder,
                 meta=meta,
             )
+            # persist original image for single-task compare
+            try:
+                if debug_folder and getattr(ctx, "input", None):
+                    import os
+                    result_dir = "../result"
+                    folder_path = os.path.join(result_dir, debug_folder)
+                    os.makedirs(folder_path, exist_ok=True)
+                    from PIL import Image  # noqa: F401
+                    orig_path = os.path.join(folder_path, "original.png")
+                    ctx.input.save(orig_path, format="PNG")
+            except Exception:
+                pass
             result_bytes = transform(ctx)
             encoded_result = b"\x00" + len(result_bytes).to_bytes(4, "big") + result_bytes
             messages.put_nowait(encoded_result)
