@@ -289,6 +289,13 @@ class DetectorConfig(BaseModel):
     """Threshold for bbox generation"""
     unclip_ratio: float = 2.3
     """How much to extend text skeleton to form bounding box"""
+    # RapidOCR detection model params (optional, only used when detector=rapidocr)
+    rapidocr_lang_type: Optional[str] = None
+    """Language type for RapidOCR detection (ch|en|multi)"""
+    rapidocr_model_type: Optional[str] = None
+    """Detection model type for RapidOCR: mobile|server (multi 仅支持 mobile)"""
+    rapidocr_ocr_version: Optional[str] = None
+    """Detection version for RapidOCR: PP-OCRv4|PP-OCRv5"""
 
 class InpainterConfig(BaseModel):
     inpainter: Inpainter = Inpainter.lama_large
@@ -311,6 +318,15 @@ class OcrConfig(BaseModel):
     """Use bbox merge when Manga OCR inference."""
     ocr: Ocr = Ocr.ocr48px
     """Optical character recognition (OCR) model to use"""
+    # RapidOCR v3 model params (optional)
+    rapidocr_engine_type: Optional[str] = None
+    """Engine backend for RapidOCR: onnxruntime|openvino|paddle|torch"""
+    rapidocr_lang_type: Optional[str] = None
+    """Language type for RapidOCR (e.g., ch|en|multi|latin|korean|...)"""
+    rapidocr_model_type: Optional[str] = None
+    """Model type for RapidOCR: mobile|server"""
+    rapidocr_ocr_version: Optional[str] = None
+    """OCR version for RapidOCR: PP-OCRv4|PP-OCRv5"""
     min_text_length: int = 0
     """Minimum text length of a text region"""
     ignore_bubble: int = 0

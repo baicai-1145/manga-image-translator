@@ -16,18 +16,73 @@ class RapidOCRDetector(CommonDetector):
         super().__init__(*args, **kwargs)
         self._engine = None
         self.logger = get_logger('manga-translator.det.rapidocr')
+        self._engine_sig = None
+
+    def _build_params(self) -> tuple[dict, tuple]:
+        """
+        根据 DetectorConfig 构造 RapidOCR 检测参数。
+        - PP-OCRv5: lang_type 仅限 ch，model_type mobile/server
+        - PP-OCRv4: lang_type 可为 ch / en / multi，multi 仅支持 mobile
+        """
+        try:
+            # RapidOCR >=3.3.0 提供的枚举类型
+            from rapidocr import LangDet, ModelType, OCRVersion  # type: ignore
+        except Exception:
+            # 如果库版本不匹配，直接回退到默认配置
+            return {}, (None, None, None)
+
+        cfg = getattr(self, "config", None)
+        # 默认走 v5 + ch
+        version = (getattr(cfg, "rapidocr_ocr_version", None) or "PP-OCRv5").upper()
+        lang = (getattr(cfg, "rapidocr_lang_type", None) or "ch").lower()
+        model = (getattr(cfg, "rapidocr_model_type", None) or "mobile").lower()
+
+        # 规范化
+        if version not in ("PP-OCRV4", "PP-OCRV5"):
+            version = "PP-OCRV5"
+        if version == "PP-OCRV5":
+            # v5 检测：只有 ch
+            lang = "ch"
+            if model not in ("mobile", "server"):
+                model = "mobile"
+        else:
+            # v4 检测：ch/en/multi
+            if lang not in ("ch", "en", "multi"):
+                lang = "ch"
+            if lang == "multi":
+                model = "mobile"
+            elif model not in ("mobile", "server"):
+                model = "mobile"
+
+        params: dict = {}
+        # 映射到 RapidOCR Enum
+        lang_enum_map = {
+            "ch": LangDet.CH,
+            "en": getattr(LangDet, "EN", LangDet.CH),
+            "multi": getattr(LangDet, "MULTI", LangDet.CH),
+        }
+        lang_enum = lang_enum_map.get(lang, LangDet.CH)
+        model_enum = ModelType.MOBILE if model == "mobile" else ModelType.SERVER
+        ver_enum = OCRVersion.PPOCRV5 if version == "PP-OCRV5" else OCRVersion.PPOCRV4
+
+        params["Det.lang_type"] = lang_enum
+        params["Det.model_type"] = model_enum
+        params["Det.ocr_version"] = ver_enum
+        sig = (lang_enum, model_enum, ver_enum)
+        return params, sig
 
     def _ensure_backend(self):
-        if self._engine is not None:
-            return
         try:
             from rapidocr import RapidOCR  # type: ignore
         except Exception as e:
             raise RuntimeError(
                 "RapidOCR backend not available. Please install: pip install rapidocr (and onnxruntime)."
             ) from e
-        self._engine = RapidOCR()
-        self.logger.info('RapidOCR engine initialized for detection.')
+        params, sig = self._build_params()
+        if self._engine is None or sig != self._engine_sig:
+            self._engine = RapidOCR(params=params)
+            self._engine_sig = sig
+            self.logger.info(f'RapidOCR detector initialized with params: {params}')
 
     async def _detect(
         self,
