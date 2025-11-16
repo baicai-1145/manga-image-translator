@@ -1,5 +1,6 @@
 import { http } from './http';
 import { resolveApiBase } from './config';
+import { getUserId } from '@/utils/session';
 
 export interface TaskRecord {
   id: string;
@@ -67,9 +68,14 @@ export interface CreateBatchZipOptions {
 export async function createBatchZip(files: File[], config: object, opts: CreateBatchZipOptions = {}): Promise<{ blob: Blob; taskId?: string }> {
   const images = await Promise.all(files.map(fileToDataUrl));
   const base = resolveApiBase() ?? '';
+  const userId = getUserId();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (userId) {
+    headers['X-User-Id'] = userId;
+  }
   const res = await fetch(`${base}/translate/batch/images`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
       images,
       config,

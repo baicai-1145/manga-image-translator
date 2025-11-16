@@ -117,11 +117,14 @@ async def while_streaming(req: Request, transform, config: Config, image: bytes 
     task_queue.add_task(task)
 
     messages = asyncio.Queue()
+    # 记录在流式过程中服务端已知的结果目录，用于在最终 ctx 中缺少 debug_folder 时兜底
+    known_folder: str | None = None
 
     def notify_internal(code: int, data: bytes) -> None:
+        nonlocal known_folder
         if code == 0:
             ctx = pickle.loads(data)
-            debug_folder = getattr(ctx, "debug_folder", None)
+            debug_folder = getattr(ctx, "debug_folder", None) or known_folder
             meta = {"debug_folder": debug_folder, **task_meta} if debug_folder else task_meta
             update_task(
                 task_id,
@@ -146,6 +149,25 @@ async def while_streaming(req: Request, transform, config: Config, image: bytes 
             encoded_result = b"\x00" + len(result_bytes).to_bytes(4, "big") + result_bytes
             messages.put_nowait(encoded_result)
         else:
+            # 处理进度消息：如果包含 rendering_folder:/final_ready:，提前记录目录并更新任务元数据
+            if code == 1:
+                try:
+                    text = data.decode("utf-8", "ignore")
+                except Exception:
+                    text = ""
+                folder = None
+                if text.startswith("final_ready:"):
+                    folder = text.split(":", 1)[1].strip()
+                elif text.startswith("rendering_folder:"):
+                    folder = text.split(":", 1)[1].strip()
+                if folder:
+                    known_folder = folder
+                    meta = {"debug_folder": folder, **task_meta}
+                    # 仅更新 result_path/meta，不修改状态，防止覆盖最终 completed 状态
+                    try:
+                        update_task(task_id, result_path=folder, meta=meta)
+                    except Exception:
+                        pass
             if code == 2:
                 update_task(
                     task_id,

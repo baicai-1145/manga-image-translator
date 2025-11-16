@@ -133,7 +133,8 @@ export const useSettingsStore = defineStore('settings', {
     detRapidocrModelType: 'mobile',
     detRapidocrLangType: 'ch',
     detRapidocrOcrVersion: 'PP-OCRv5',
-    ocrEngine: 'rapidocr',
+    // 默认回到 OCR 48px CTC，与原 front 体验一致
+    ocrEngine: '48px_ctc',
     rapidocrModelType: 'mobile',
     rapidocrLangType: 'ch',       // 由用户按源语言调整，如日文可切换 'japan'
     rapidocrOcrVersion: 'PP-OCRv5',

@@ -2,11 +2,6 @@
   <section class="card" v-if="task">
     <header class="row">
       <h3>任务详情</h3>
-      <div class="actions">
-        <button class="ghost" @click="showDebug = !showDebug">{{ showDebug ? '隐藏调试' : '调试信息' }}</button>
-        <button class="ghost" @click="refresh">刷新</button>
-        <button class="ghost" @click="$emit('close')">返回</button>
-      </div>
     </header>
     <div class="grid">
       <!-- Batch gallery -->
@@ -49,7 +44,7 @@
         <p v-if="task.error" class="error"><b>错误：</b>{{ task.error }}</p>
         <p v-if="folder"><b>结果目录：</b><span class="mono">{{ folder }}</span></p>
       </div>
-      <details v-if="showDebug" class="debug" open>
+      <details class="debug" open>
         <summary>调试信息（点击收起）</summary>
         <div class="kv"><b>result_path:</b><code>{{ task.result_path ?? '-' }}</code></div>
         <div class="kv"><b>meta.debug_folder:</b><code>{{ (task.meta as any)?.debug_folder ?? '-' }}</code></div>
@@ -103,7 +98,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import type { TaskRecord } from '@/services/api';
-import { getResultImageUrl, listResultDirectories, getResultFileUrl } from '@/services/api';
+import { getResultImageUrl, getResultFileUrl } from '@/services/api';
 import { useTaskStore } from '@/stores/taskStore';
 import { useBatchStore } from '@/stores/batchStore';
 
@@ -112,7 +107,6 @@ defineEmits<{ (e: 'close'): void }>();
 const taskStore = useTaskStore();
 const batchStore = useBatchStore();
 const imgError = ref(false);
-const showDebug = ref(false);
 const resolving = ref(false);
 
 function normalizeFolder(value?: string | null): string | null {
@@ -328,12 +322,6 @@ const formattedMeta = computed(() => {
   }
 });
 
-function refresh() {
-  if (props.task?.id) {
-    taskStore.loadTaskDetail(props.task.id);
-  }
-}
-
 function downloadZip() {
   const z = batchZip.value;
   if (!z) return;
@@ -347,29 +335,9 @@ function downloadZip() {
   URL.revokeObjectURL(url);
 }
 
-// If folder is missing but task completed, as a last resort query /results/list
-async function resolveByListing() {
-  if (!props.task) return;
-  if (folder.value) return; // 已解析到目录，无需兜底
-  try {
-    resolving.value = true;
-    const dirs = await listResultDirectories();
-    // choose the most recent by lexicographic order (timestamp prefix)
-    const candidate = dirs.sort().reverse()[0];
-    if (candidate && props.task.id) {
-      taskStore.setFallbackFolder(props.task.id, candidate);
-    }
-  } finally {
-    resolving.value = false;
-  }
-}
+// 不再通过 /results/list 猜测目录，避免和其它任务/用户结果混淆。
+// 仅使用任务自身的 result_path/meta/debug_folder 或流式回调设置的 fallbackFolder。
 
-// attempt to resolve once when mounted and when task changes
-watch(
-  () => props.task?.id + ':' + (props.task?.status ?? ''),
-  () => resolveByListing(),
-  { immediate: true }
-);
 </script>
 
 <style scoped>

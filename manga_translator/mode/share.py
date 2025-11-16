@@ -110,6 +110,12 @@ class MangaShare:
             self.check_lock()
             method = self.get_fn(method_name)
             attr = pickle.loads(await request.body())
+            # simple_execute 始终视为非流式调用，禁用占位符优化
+            # 避免上一条流式请求遗留的 _is_streaming_mode=True 影响本次结果
+            try:
+                setattr(self.manga, "_is_streaming_mode", False)
+            except Exception:
+                pass
             try:
                 if asyncio.iscoroutinefunction(method):
                     result = await method(**attr)

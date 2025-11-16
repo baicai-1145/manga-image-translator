@@ -5,7 +5,11 @@
       <div class="user">
         <label>
           用户ID（可选）
-          <input v-model.trim="userId" placeholder="用于区分任务归属" @change="persistUserId" />
+          <input
+            v-model.trim="userId"
+            placeholder="用于区分任务归属"
+            @input="persistUserId"
+          />
         </label>
       </div>
     </header>
@@ -38,7 +42,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue';
+import { ref, reactive, watch } from 'vue';
 import { uploadAndStream } from '@/services/stream';
 import { useUiStore } from '@/stores/uiStore';
 import { getUserId, setUserId } from '@/utils/session';
@@ -104,6 +108,8 @@ function resetStates() {
 
 async function start() {
   if (!files.value.length || uploading.value) return;
+  // 确保开始任务前已持久化最新用户ID
+  persistUserId();
   resetStates();
   uploading.value = true;
   ui.setUploading(true);
@@ -196,6 +202,12 @@ async function start() {
     await taskStore.loadTasks();
   }
 }
+
+// 当用户 ID 变化时，立即持久化并按新 ID 重新拉取任务列表
+watch(userId, () => {
+  persistUserId();
+  taskStore.loadTasks();
+});
 </script>
 
 <style scoped>
